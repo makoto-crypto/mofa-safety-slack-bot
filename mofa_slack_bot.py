@@ -325,7 +325,7 @@ def build_slack_text(mails):
 
         # 行頭の国表示
         if paren_country:
-            first_line_country = f"*{base_country_label}*（{paren_country}）"
+            first_line_country = f"*{base_country_label}*
         else:
             first_line_country = f"*{base_country_label}*"
 
