@@ -314,31 +314,33 @@ def build_slack_text(mails):
     # 古い順に並び替え
     mails = sorted(mails, key=lambda m: m["leave_dt"])
 
-    for m in mails:
+        for m in mails:
         code = m["country_cd"] or ""
-        # 国名（コード→対応表→なければXMLのcountry_name）
         country_name_from_map = COUNTRY_CODE_MAP.get(code)
         base_country_label = f"国コード: {code}" if code else (m["country_name"] or "国不明")
 
-        # () の中に表示する国名（対応表 → country_name → 空）
         paren_country = country_name_from_map or m["country_name"] or ""
 
-        # 行頭の国表示
+        # ★ここはそのままにする（国コードの後ろに国名を出したい）
         if paren_country:
-            first_line_country = f"*{base_country_label}*
+            first_line_country = f"*{base_country_label}*（{paren_country}）"
         else:
             first_line_country = f"*{base_country_label}*"
 
         area = m["area_name"] or ""
         ld_str = m["leave_dt"].strftime("%Y/%m/%d %H:%M") if m["leave_dt"] else m["leave_date"]
 
-        # 種別コード → 種別名
+        # ★ここを追加：area があるときだけ（エリア名）を付ける
+        if area:
+            location_part = f"{first_line_country}（{area}）"
+        else:
+            location_part = first_line_country
+
         info_type_code = m["info_type"]
         info_type_label = INFO_TYPE_MAP.get(info_type_code)
         if info_type_label:
             type_text = f"{info_type_code}（{info_type_label}）"
         else:
-            # infoNameLong が入っていることも多いので fallback で
             fallback = m["info_name_long"] or m["info_name"] or info_type_code
             type_text = f"{info_type_code}（{fallback}）"
 
@@ -346,7 +348,6 @@ def build_slack_text(mails):
         if m.get("koukan_name"):
             koukan = f"　発出公館: {m['koukan_name']}（{m.get('koukan_cd','')}）\n"
 
-        # 危険レベル・感染症レベル（Y/N）
         level_parts = []
         if any(m.get(f"risk_level{lv}") == "Y" for lv in (1, 2, 3, 4)):
             lv_str = " / ".join(
@@ -363,7 +364,7 @@ def build_slack_text(mails):
             level_text = "　" + " / ".join(level_parts) + "\n"
 
         line = (
-            f"• {first_line_country}（{area}）\n"
+            f"• {location_part}\n"   # ★ここだけ変わる
             f"　種別: {type_text}\n"
             f"　日時: {ld_str}\n"
             f"{koukan}"
