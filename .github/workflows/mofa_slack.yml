@@ -2,11 +2,9 @@ name: MOFA Safety Info to Slack
 
 on:
   schedule:
-    # UTCで10分おきに実行
-    # 日本時間とずれてても問題なし（newarrivalはJST基準だがWINDOW_MINUTESで吸収）
-    - cron: "*/10 * * * *"
-  workflow_dispatch:  # 手動実行もできるようにしておく（テスト用）
-    inputs: {}
+    # 毎日 00:00 UTC（= 日本時間 09:00）に実行
+    - cron: "0 0 * * *"
+  workflow_dispatch:  # 手動実行（テスト用）
 
 jobs:
   run-script:
