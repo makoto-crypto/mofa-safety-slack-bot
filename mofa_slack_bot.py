@@ -25,7 +25,7 @@ except ImportError:
 MOFA_NEWARRIVAL_URL = "https://www.ezairyu.mofa.go.jp/opendata/area/newarrivalL.xml"
 
 # 「新着」とみなす時間幅（分）
-WINDOW_MINUTES = 10
+WINDOW_MINUTES = 1440
 
 # Slack Webhook URL（GitHub Secret から渡す想定）
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
