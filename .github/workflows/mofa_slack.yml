@@ -1,0 +1,33 @@
+name: MOFA Safety Info to Slack
+
+on:
+  schedule:
+    # UTCで10分おきに実行
+    # 日本時間とずれてても問題なし（newarrivalはJST基準だがWINDOW_MINUTESで吸収）
+    - cron: "*/10 * * * *"
+  workflow_dispatch:  # 手動実行もできるようにしておく（テスト用）
+    inputs: {}
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run MOFA to Slack script
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python mofa_slack_bot.py
