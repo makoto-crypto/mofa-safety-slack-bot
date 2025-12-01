@@ -6,13 +6,7 @@
 海外安全情報(危険/感染症危険/スポット/広域)＋在外公館メール(一般/緊急)
 が新しく出るたびに Slack に通知するスクリプト。
 
-・対象: newarrivalL.xml に含まれる全 infoType
-  - C30: スポット情報
-  - T40: 危険情報
-  - T41: 感染症危険情報
-  - C50: 広域情報
-  - R10: 領事メール(一般)
-  - R20: 領事メール(緊急)
+・対象: newarrivalL.xml の全 infoType（T40/T81/C30/C31/C50/C51/R10/R20 等）
 ・GitHub Actions で 5分おき実行を想定
   → 直近 WINDOW_MINUTES 分以内に出たものだけを通知
 """
@@ -29,6 +23,12 @@ except ImportError:
 
 # newarrival (軽量版)
 MOFA_NEWARRIVAL_URL = "https://www.ezairyu.mofa.go.jp/opendata/area/newarrivalL.xml"
+
+# 「新着」とみなす時間幅（分）
+WINDOW_MINUTES = 10
+
+# Slack Webhook URL（GitHub Secret から渡す想定）
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
 # 国コード → 国名（国または地域名称）
 COUNTRY_CODE_MAP = {
@@ -58,7 +58,7 @@ COUNTRY_CODE_MAP = {
     "0976": "モンゴル",
     "0977": "ネパール",
 
-    "0061": "オーストラリア／豪州",
+    "0061": "オーストラリア",  # 好きな表記にしてOK
     "0064": "ニュージーランド",
     "0674": "ナウル",
     "0675": "パプアニューギニア",
@@ -75,13 +75,13 @@ COUNTRY_CODE_MAP = {
     "0688": "ツバル",
     "0691": "ミクロネシア",
     "0692": "マーシャル諸島",
-    "1001": "アメリカ合衆国／米国（北マリアナ諸島）",
-    "1002": "アメリカ合衆国／米国（グアム）",
+    "1001": "アメリカ合衆国（北マリアナ諸島）",
+    "1002": "アメリカ合衆国（グアム）",
     "1684": "サモア（米領）",
     "9689": "タヒチ（仏領ポリネシア）",
 
-    "1000": "アメリカ合衆国／米国（本土）",
-    "1808": "アメリカ合衆国／米国（ハワイ）",
+    "1000": "アメリカ合衆国（本土）",
+    "1808": "アメリカ合衆国（ハワイ）",
     "9001": "カナダ",
 
     "0051": "ペルー",
@@ -129,7 +129,7 @@ COUNTRY_CODE_MAP = {
     "0040": "ルーマニア",
     "0041": "スイス",
     "0043": "オーストリア",
-    "0044": "英国／イギリス／グレートブリテン及び北部アイルランド連合王国",
+    "0044": "英国",
     "0045": "デンマーク",
     "0046": "スウェーデン",
     "0047": "ノルウェー",
@@ -141,7 +141,7 @@ COUNTRY_CODE_MAP = {
     "0354": "アイスランド",
     "0355": "アルバニア",
     "0356": "マルタ",
-    "0357": "キプロス／サイプラス",
+    "0357": "キプロス",
     "0358": "フィンランド",
     "0359": "ブルガリア",
     "0370": "リトアニア",
@@ -159,14 +159,14 @@ COUNTRY_CODE_MAP = {
     "0385": "クロアチア",
     "0386": "スロベニア",
     "0387": "ボスニア・ヘルツェゴビナ",
-    "0389": "北マケドニア共和国",
+    "0389": "北マケドニア",
     "0420": "チェコ",
     "0421": "スロバキア",
     "0423": "リヒテンシュタイン",
     "0992": "タジキスタン",
     "0993": "トルクメニスタン",
     "0994": "アゼルバイジャン",
-    "0995": "ジョージア（旧グルジア）",
+    "0995": "ジョージア",
     "0996": "キルギス",
     "0998": "ウズベキスタン",
     "9007": "ロシア",
@@ -260,20 +260,11 @@ INFO_TYPE_MAP = {
 }
 
 
-# 「新着」とみなす時間幅（分）
-# GitHub Actions を 5 分おきに動かす前提で、少し余裕を持って 10 分に。
-WINDOW_MINUTES = 1440
-
-# Slack Webhook URL（GitHub Secret から渡す想定）
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
-
-
 def get_now_jst():
     """JSTの現在時刻を返す"""
     if ZoneInfo is not None:
         return datetime.now(ZoneInfo("Asia/Tokyo"))
     else:
-        # 古いPythonの場合はUTCのまま使う（多少ずれても致命的ではない）
         return datetime.utcnow()
 
 
@@ -314,14 +305,14 @@ def build_slack_text(mails):
     # 古い順に並び替え
     mails = sorted(mails, key=lambda m: m["leave_dt"])
 
-        for m in mails:
+    for m in mails:
         code = m["country_cd"] or ""
         country_name_from_map = COUNTRY_CODE_MAP.get(code)
         base_country_label = f"国コード: {code}" if code else (m["country_name"] or "国不明")
 
         paren_country = country_name_from_map or m["country_name"] or ""
 
-        # ★ここはそのままにする（国コードの後ろに国名を出したい）
+        # 国コードの後ろに国名
         if paren_country:
             first_line_country = f"*{base_country_label}*（{paren_country}）"
         else:
@@ -330,12 +321,13 @@ def build_slack_text(mails):
         area = m["area_name"] or ""
         ld_str = m["leave_dt"].strftime("%Y/%m/%d %H:%M") if m["leave_dt"] else m["leave_date"]
 
-        # ★ここを追加：area があるときだけ（エリア名）を付ける
+        # area があるときだけ（地域名）を追加
         if area:
             location_part = f"{first_line_country}（{area}）"
         else:
             location_part = first_line_country
 
+        # 種別コード → 種別名
         info_type_code = m["info_type"]
         info_type_label = INFO_TYPE_MAP.get(info_type_code)
         if info_type_label:
@@ -348,6 +340,7 @@ def build_slack_text(mails):
         if m.get("koukan_name"):
             koukan = f"　発出公館: {m['koukan_name']}（{m.get('koukan_cd','')}）\n"
 
+        # 危険レベル・感染症レベル（Y/N）
         level_parts = []
         if any(m.get(f"risk_level{lv}") == "Y" for lv in (1, 2, 3, 4)):
             lv_str = " / ".join(
@@ -364,7 +357,7 @@ def build_slack_text(mails):
             level_text = "　" + " / ".join(level_parts) + "\n"
 
         line = (
-            f"• {location_part}\n"   # ★ここだけ変わる
+            f"• {location_part}\n"
             f"　種別: {type_text}\n"
             f"　日時: {ld_str}\n"
             f"{koukan}"
@@ -377,7 +370,6 @@ def build_slack_text(mails):
     return "\n".join(lines)
 
 
-
 def post_to_slack(text: str):
     """Webhook経由でSlackに投稿"""
     if not SLACK_WEBHOOK_URL:
@@ -385,9 +377,6 @@ def post_to_slack(text: str):
 
     payload = {
         "text": text,
-        # 好みで Bot 名やアイコン設定も可
-        # "username": "MOFA Bot",
-        # "icon_emoji": ":rotating_light:",
     }
     resp = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=10)
     resp.raise_for_status()
@@ -420,14 +409,8 @@ def main():
         koukan_name = mail.findtext("koukanName", default="")
 
         # 危険レベル / 感染症レベル（Y/N）
-        risk_levels = {
-            lv: mail.findtext(f"riskLevel{lv}", default="")
-            for lv in (1, 2, 3, 4)
-        }
-        infection_levels = {
-            lv: mail.findtext(f"infectionLevel{lv}", default="")
-            for lv in (1, 2, 3, 4)
-        }
+        risk_levels = {lv: mail.findtext(f"riskLevel{lv}", default="") for lv in (1, 2, 3, 4)}
+        infection_levels = {lv: mail.findtext(f"infectionLevel{lv}", default="") for lv in (1, 2, 3, 4)}
 
         obj = {
             "info_type": info_type,
@@ -443,7 +426,7 @@ def main():
             "koukan_cd": koukan_cd,
             "koukan_name": koukan_name,
         }
-        # レベル情報を展開
+
         for lv, val in risk_levels.items():
             obj[f"risk_level{lv}"] = val
         for lv, val in infection_levels.items():
